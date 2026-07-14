@@ -1,0 +1,132 @@
+- ---------- TABLES  ----------
+CREATE TABLE farmer (
+    farmer_id      NUMBER(6)       CONSTRAINT pk_farmer PRIMARY KEY,
+    full_name      VARCHAR2(100)   NOT NULL,
+    phone          VARCHAR2(15)    NOT NULL,
+    national_id    VARCHAR2(20)    NOT NULL,
+    address        VARCHAR2(150),
+    registered_on  DATE            DEFAULT SYSDATE NOT NULL,
+    CONSTRAINT uq_farmer_nid UNIQUE (national_id)
+);
+ 
+CREATE TABLE farm (
+    farm_id        NUMBER(6)       CONSTRAINT pk_farm PRIMARY KEY,
+    farmer_id      NUMBER(6)       NOT NULL,
+    location       VARCHAR2(100)   NOT NULL,
+    size_hectares  NUMBER(6,2)     NOT NULL,
+    CONSTRAINT fk_farm_farmer FOREIGN KEY (farmer_id) REFERENCES farmer (farmer_id),
+    CONSTRAINT chk_farm_size CHECK (size_hectares > 0)
+);
+ 
+CREATE TABLE crop (
+    crop_id         NUMBER(6)      CONSTRAINT pk_crop PRIMARY KEY,
+    crop_name       VARCHAR2(50)   NOT NULL,
+    unit_of_measure VARCHAR2(10)   NOT NULL,
+    CONSTRAINT uq_crop_name UNIQUE (crop_name)
+);
+ 
+CREATE TABLE harvest (
+    harvest_id     NUMBER(8)       CONSTRAINT pk_harvest PRIMARY KEY,
+    farm_id        NUMBER(6)       NOT NULL,
+    crop_id        NUMBER(6)       NOT NULL,
+    harvest_date   DATE            NOT NULL,
+    quantity       NUMBER(10,2)    NOT NULL,
+    quality_grade  VARCHAR2(1)     DEFAULT 'B',
+    CONSTRAINT fk_harvest_farm FOREIGN KEY (farm_id) REFERENCES farm (farm_id),
+    CONSTRAINT fk_harvest_crop FOREIGN KEY (crop_id) REFERENCES crop (crop_id),
+    CONSTRAINT chk_harvest_qty CHECK (quantity > 0),
+    CONSTRAINT chk_harvest_grade CHECK (quality_grade IN ('A','B','C'))
+);
+ 
+CREATE TABLE buyer (
+    buyer_id       NUMBER(6)       CONSTRAINT pk_buyer PRIMARY KEY,
+    buyer_name     VARCHAR2(100)   NOT NULL,
+    buyer_type     VARCHAR2(20)    NOT NULL,
+    phone          VARCHAR2(15)    NOT NULL,
+    location       VARCHAR2(100),
+    CONSTRAINT chk_buyer_type CHECK (buyer_type IN ('MARKET','COOPERATIVE','EXPORTER','PROCESSOR'))
+);
+ 
+CREATE TABLE sale (
+    sale_id        NUMBER(8)       CONSTRAINT pk_sale PRIMARY KEY,
+    harvest_id     NUMBER(8)       NOT NULL,
+    buyer_id       NUMBER(6)       NOT NULL,
+    sale_date      DATE            DEFAULT SYSDATE NOT NULL,
+    quantity_sold  NUMBER(10,2)    NOT NULL,
+    unit_price     NUMBER(10,2)    NOT NULL,
+    CONSTRAINT fk_sale_harvest FOREIGN KEY (harvest_id) REFERENCES harvest (harvest_id),
+    CONSTRAINT fk_sale_buyer FOREIGN KEY (buyer_id) REFERENCES buyer (buyer_id),
+    CONSTRAINT chk_sale_qty CHECK (quantity_sold > 0),
+    CONSTRAINT chk_sale_price CHECK (unit_price > 0)
+);
+ 
+CREATE TABLE payment (
+    payment_id     NUMBER(8)       CONSTRAINT pk_payment PRIMARY KEY,
+    sale_id        NUMBER(8)       NOT NULL,
+    payment_date   DATE            DEFAULT SYSDATE NOT NULL,
+    amount         NUMBER(12,2)    NOT NULL,
+    payment_method VARCHAR2(20)    NOT NULL,
+    status         VARCHAR2(15)    DEFAULT 'PENDING' NOT NULL,
+    CONSTRAINT fk_payment_sale FOREIGN KEY (sale_id) REFERENCES sale (sale_id),
+    CONSTRAINT uq_payment_sale UNIQUE (sale_id),
+    CONSTRAINT chk_payment_amt CHECK (amount > 0),
+    CONSTRAINT chk_payment_status CHECK (status IN ('PENDING','PAID','FAILED')),
+    CONSTRAINT chk_payment_method CHECK (payment_method IN ('CASH','MOBILE_MONEY','BANK_TRANSFER'))
+);
+ 
+CREATE TABLE public_holiday (
+    holiday_id     NUMBER(6)       CONSTRAINT pk_holiday PRIMARY KEY,
+    holiday_date   DATE            NOT NULL,
+    description    VARCHAR2(100),
+    CONSTRAINT uq_holiday_date UNIQUE (holiday_date)
+);
+ 
+CREATE TABLE audit_log (
+    audit_id       NUMBER(10)      CONSTRAINT pk_audit PRIMARY KEY,
+    table_name     VARCHAR2(30)    NOT NULL,
+    action_type    VARCHAR2(10)    NOT NULL,
+    action_date    DATE            DEFAULT SYSDATE NOT NULL,
+    username       VARCHAR2(30)    DEFAULT USER NOT NULL,
+    record_id      VARCHAR2(30),
+    old_value      VARCHAR2(4000),
+    new_value      VARCHAR2(4000),
+    CONSTRAINT chk_audit_action CHECK (action_type IN ('INSERT','UPDATE','DELETE'))
+);
+ 
+-- ---------- SEQUENCES ----------
+CREATE SEQUENCE seq_farmer_id  START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_farm_id    START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_crop_id    START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_harvest_id START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_buyer_id   START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_sale_id    START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_payment_id START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_holiday_id START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_audit_id   START WITH 1 INCREMENT BY 1;
+ 
+-- ---------- SAMPLE DATA ----------
+INSERT INTO crop VALUES (seq_crop_id.NEXTVAL, 'Maize', 'KG');
+INSERT INTO crop VALUES (seq_crop_id.NEXTVAL, 'Coffee', 'KG');
+INSERT INTO crop VALUES (seq_crop_id.NEXTVAL, 'Irish Potato', 'KG');
+ 
+INSERT INTO farmer VALUES (seq_farmer_id.NEXTVAL, 'Jean Baptiste Uwimana', '0788123456', '119800012345', 'Musanze', SYSDATE);
+INSERT INTO farmer VALUES (seq_farmer_id.NEXTVAL, 'Alice Mukamana', '0788654321', '119800067890', 'Nyagatare', SYSDATE);
+ 
+INSERT INTO farm VALUES (seq_farm_id.NEXTVAL, 1, 'Musanze, Cyuve', 2.5);
+INSERT INTO farm VALUES (seq_farm_id.NEXTVAL, 2, 'Nyagatare, Karangazi', 4.0);
+ 
+INSERT INTO buyer VALUES (seq_buyer_id.NEXTVAL, 'Musanze Cooperative Market', 'COOPERATIVE', '0722334455', 'Musanze');
+INSERT INTO buyer VALUES (seq_buyer_id.NEXTVAL, 'AgriExport Rwanda Ltd', 'EXPORTER', '0733445566', 'Kigali');
+
+INSERT INTO sale VALUES (seq_sale_id.NEXTVAL, 1, 1, DATE '2026-04-05', 200, 350);
+INSERT INTO sale VALUES (seq_sale_id.NEXTVAL, 2, 2, DATE '2026-04-10', 100, 1200);
+
+INSERT INTO payment VALUES (seq_payment_id.NEXTVAL, 1, DATE '2026-04-06', 70000, 'MOBILE_MONEY', 'PAID');
+INSERT INTO payment VALUES (seq_payment_id.NEXTVAL, 2, DATE '2026-04-11', 120000, 'BANK_TRANSFER', 'PENDING');
+ 
+INSERT INTO public_holiday VALUES (seq_holiday_id.NEXTVAL, DATE '2026-07-04', 'Liberation Day');
+INSERT INTO public_holiday VALUES (seq_holiday_id.NEXTVAL, DATE '2026-08-15', 'Assumption Day');
+ 
+INSERT INTO harvest VALUES (seq_harvest_id.NEXTVAL, 1, 1, DATE '2026-03-15', 500, 'A');
+INSERT INTO harvest VALUES (seq_harvest_id.NEXTVAL, 2, 2, DATE '2026-04-01', 300, 'A');
+ 
