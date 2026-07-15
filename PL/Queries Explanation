@@ -1,0 +1,157 @@
+# Queries Explanation
+### Farmer Produce & Market Supply Chain Management System — 31383_2025_Valentin_Farm_DB
+
+This document explains, in plain language, what each significant query in the project does, which tables it touches, and why it matters to the business.
+Use this alongside the Live Demonstration Script when explaining query execution to an examiner.
+
+---
+
+## 1. Revenue by Buyer
+
+```sql
+SELECT b.buyer_name, SUM(s.quantity_sold * s.unit_price) AS total_revenue
+FROM sale s
+JOIN buyer b ON s.buyer_id = b.buyer_id
+GROUP BY b.buyer_name
+ORDER BY total_revenue DESC;
+```
+
+**What it does:** Joins `SALE` to `BUYER` so each sale row is linked to the buyer who made it, multiplies quantity by unit price to get revenue per sale, then totals
+that per buyer and ranks buyers from highest to lowest revenue.
+
+**Why it matters:** Tells the cooperative which buyers are worth prioritizing relationships with — directly answers one of the Phase I 
+  objectives ("insight into which buyer offers the best price").
+
+---
+
+## 2. Harvest Detail Listing
+
+```sql
+SELECT f.full_name, c.crop_name, h.quantity, h.quality_grade
+FROM harvest h
+JOIN farm f ON h.farm_id = f.farm_id
+JOIN crop c ON h.crop_id = c.crop_id
+ORDER BY h.harvest_date;
+```
+
+**What it does:** A three-way join across `HARVEST`, `FARM`, and `CROP` that turns internal foreign-key IDs into human-readable output — 
+  the farmer's name and the crop's name — for every harvest, ordered chronologically.
+
+**Why it matters:** This is the query a cooperative clerk would run to see "who delivered what, and how much" without needing to look up ID numbers manually.
+
+---
+
+## 3. Pending Payments (Unpaid Sales)
+
+```sql
+SELECT s.sale_id, b.buyer_name, s.quantity_sold, s.unit_price,
+       (s.quantity_sold * s.unit_price) AS total_due
+FROM sale s
+JOIN buyer b ON s.buyer_id = b.buyer_id
+WHERE s.sale_id NOT IN (SELECT sale_id FROM payment);
+```
+
+**What it does:** Finds every sale that does **not** yet have a matching row in `PAYMENT`, using a subquery to exclude sale IDs that already appear in the payment
+ table. This logic is saved permanently as the view `v_unpaid_sales`, so it can be reused by both the PL/SQL cursor and the APEX dashboard without rewriting it.
+
+**Why it matters:** Directly supports the objective of faster payment processing — this is the query that tells cooperative staff who still needs to be paid.
+
+---
+
+## 4. Audit Trail Retrieval
+
+```sql
+SELECT audit_id, table_name, action_type, action_date, username, record_id
+FROM   audit_log
+ORDER BY action_date DESC;
+```
+
+**What it does:** Reads every row from `AUDIT_LOG` — populated automatically by the `trg_audit_sale` and `trg_audit_payment` triggers — most recent activity first.
+
+**Why it matters:** This is the query an administrator runs to answer "who changed what, and when." It never needs a WHERE clause tied to a specific table because 
+ the audit design captures every SALE and PAYMENT change centrally.
+
+---
+
+## 5. Sale Total (Function-Based Query)
+
+```sql
+SELECT calc_sale_total(1) FROM dual;
+```
+
+**What it does:** Calls the `calc_sale_total` PL/SQL function from a plain SQL statement. The function internally runs 
+ `SELECT quantity_sold * unit_price INTO v_total FROM sale WHERE sale_id = p_sale_id`, wrapped in exception handling for a missing sale ID.
+
+**Why it matters:** Demonstrates that business logic (the total calculation) lives in one place in the database — the function — 
+  rather than being recalculated inconsistently in every query or app screen that needs it.
+
+---
+
+## 6. Farmer Revenue (Multi-Join Aggregate Inside a Function)
+
+```sql
+SELECT NVL(SUM(s.quantity_sold * s.unit_price), 0)
+FROM sale s
+JOIN harvest h ON s.harvest_id = h.harvest_id
+JOIN farm f    ON h.farm_id = f.farm_id
+WHERE f.farmer_id = p_farmer_id;
+```
+
+**What it does:** Chains three joins (`SALE → HARVEST → FARM`) to trace every sale back to the farmer who ultimately produced it, then sums total revenue for 
+that farmer. `NVL` ensures a farmer with zero sales returns `0` instead of `NULL`.
+
+**Why it matters:** Answers "how much has this specific farmer earned in total?" — a question that can't be answered from any single 
+ table, since `SALE` doesn't store `farmer_id` directly (by design, to keep the schema normalized).
+
+---
+
+## 7. Explicit Cursor Query (Unpaid Sales, PL/SQL)
+
+```sql
+CURSOR c_unpaid IS
+    SELECT s.sale_id, b.buyer_name, s.quantity_sold, s.unit_price,
+           (s.quantity_sold * s.unit_price) AS total_due
+    FROM sale s JOIN buyer b ON s.buyer_id = b.buyer_id
+    WHERE s.sale_id NOT IN (SELECT sale_id FROM payment);
+```
+
+**What it does:** Same logic as query 3, but declared as an explicit cursor inside `farm_pkg.list_unpaid_sales`, so it can be opened, fetched row-by-row, 
+ and printed via `DBMS_OUTPUT` — demonstrating procedural row-level control rather than a single set-based result.
+
+**Why it matters:** Satisfies the PL/SQL programming requirement to demonstrate an explicit cursor, while still solving a genuine business need 
+  (a printable list of outstanding payments).
+
+---
+
+## 8. Schema Introspection Queries
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+
+SELECT constraint_name, constraint_type, table_name
+FROM user_constraints
+WHERE table_name IN ('FARM','HARVEST','SALE','PAYMENT')
+ORDER BY table_name;
+```
+
+**What it does:** Queries Oracle's data dictionary views (`user_tables`, `user_constraints`) rather than the project's own tables, to list what exists in
+the schema and how it's constrained.
+
+**Why it matters:** These are the queries used to demonstrate "database structure" live — they prove the constraints exist in the running database, not just 
+in the DDL script.
+
+---
+
+## 9. Trigger Validation Logic (Embedded Query)
+
+```sql
+SELECT COUNT(*) INTO v_holiday_cnt
+FROM public_holiday
+WHERE holiday_date = TRUNC(SYSDATE);
+```
+
+**What it does:** Runs inside `trg_sale_business_rule` before every sale insert/update/delete, checking whether today's date (with time stripped via `TRUNC`) 
+appears in `PUBLIC_HOLIDAY`.
+
+**Why it matters:** This is the query that makes the weekday/holiday sales restriction data-driven — new holidays can be added by
+  inserting a row into `PUBLIC_HOLIDAY`, with no code changes to the trigger itself.
