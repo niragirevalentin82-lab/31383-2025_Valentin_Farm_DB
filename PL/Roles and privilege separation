@@ -1,0 +1,32 @@
+Roles and privilege separation
+CREATE ROLE role_clerk;
+CREATE ROLE role_buyer_viewer;
+CREATE ROLE role_admin;
+ 
+GRANT SELECT, INSERT, UPDATE ON farmer  TO role_clerk;
+GRANT SELECT, INSERT, UPDATE ON farm    TO role_clerk;
+GRANT SELECT, INSERT, UPDATE ON harvest TO role_clerk;
+GRANT SELECT, INSERT, UPDATE ON sale    TO role_clerk;
+GRANT SELECT, INSERT, UPDATE ON payment TO role_clerk;
+GRANT SELECT ON crop  TO role_clerk;
+GRANT SELECT ON buyer TO role_clerk;
+ 
+GRANT SELECT ON crop    TO role_buyer_viewer;
+GRANT SELECT ON harvest TO role_buyer_viewer;
+GRANT SELECT ON sale    TO role_buyer_viewer;
+ 
+GRANT SELECT, INSERT, UPDATE, DELETE ON farmer        TO role_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON farm           TO role_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON crop           TO role_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON harvest        TO role_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON buyer          TO role_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON sale           TO role_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON payment        TO role_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public_holiday TO role_admin;
+GRANT SELECT ON audit_log TO role_admin;
+ 
+CREATE USER clerk1 IDENTIFIED BY "ClerkPass#2026";
+GRANT CREATE SESSION TO clerk1;
+GRANT role_clerk TO clerk1;
+ 
+REVOKE DELETE ON sale FROM role_clerk;
